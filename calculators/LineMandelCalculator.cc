@@ -7,7 +7,6 @@
 
 #include <iostream>
 #include <cstdlib>
-#include <cstring>
 #include "LineMandelCalculator.h"
 
 using std::cout;
@@ -65,7 +64,7 @@ LineMandelCalculator::~LineMandelCalculator() {
 
 int *LineMandelCalculator::calculateMandelbrot() {
 
-#pragma omp simd aligned(data:ALIGN_SIZE) simdlen(SIMD_LEN_INT) uniform(limit)
+#pragma omp simd simdlen(SIMD_LEN_INT)
     // prefill default values to the data array, vectorize it
     for (auto i = 0; i < height * width; i++) {
         data[i] = limit;
@@ -77,7 +76,7 @@ int *LineMandelCalculator::calculateMandelbrot() {
         auto y_value = float(y_start + y_index * dy);
 
         // prepare the current values for given line (y_index)
-#pragma omp simd aligned(z_x_temp:ALIGN_SIZE, z_y_temp:ALIGN_SIZE) simdlen(SIMD_LEN_FLOAT) uniform(x_start, dx)
+#pragma omp simd simdlen(SIMD_LEN_FLOAT)
         for (auto x_index = 0; x_index <= width; x_index++) {
             z_x_temp[x_index] = float(x_start + x_index * dx);
             z_y_temp[x_index] = y_value;
@@ -86,30 +85,27 @@ int *LineMandelCalculator::calculateMandelbrot() {
         // calculate mandelbrot for given line (y_index) - iterating over the entire line
         for (auto calc_iter = 0; calc_iter < limit; ++calc_iter) {
             // for each cell in the line (going over the width), calculate mandelbrot
-#pragma omp simd aligned(data:ALIGN_SIZE, z_x_temp:ALIGN_SIZE, z_y_temp:ALIGN_SIZE) simdlen(SIMD_LEN_FLOAT) uniform(limit, x_start, dx, y_value)
-            for (auto x_index = 0; x_index <= width; x_index++) {
-                // if the cell is set to limit, it has not been calculated yet, so perform the calculation.
-                if (data[y_index * width + x_index] == limit) { // TODO - move to if on 104 to improve vectorization?
 
-                    auto x_value = float(x_start + x_index * dx);
+            int checker = 0;
+#pragma omp simd simdlen(SIMD_LEN_FLOAT)
+            for (int x_index = 0; x_index < width; x_index++) {
+                if (data[y_index * width + x_index] == limit) {
+                    float x_squared = z_x_temp[x_index] * z_x_temp[x_index];
+                    float y_squared = z_y_temp[x_index] * z_y_temp[x_index];
 
-                    auto z_x = z_x_temp[x_index];
-                    auto z_y = z_y_temp[x_index];
-
-                    auto z_x2 = z_x * z_x;
-                    auto z_y2 = z_y * z_y;
-
-                    if (z_x2 + z_y2 > 4.0f) {
+                    if (x_squared + y_squared > 4.0f) {
                         data[y_index * width + x_index] = calc_iter;
+                        checker = checker - 1;
                     } else {
-                        z_y_temp[x_index] = 2.0f * z_x * z_y + y_value;
-                        z_x_temp[x_index] = z_x2 - z_y2 + x_value;
+                        z_y_temp[x_index] = 2.0f * z_x_temp[x_index] * z_y_temp[x_index] + y_value;
+                        z_x_temp[x_index] = x_squared - y_squared + (x_start + x_index * dx);
                     }
                 }
             }
+            if (!checker) break;
         }
 
-#pragma omp simd aligned(data: ALIGN_SIZE) uniform(y_index, width)
+#pragma omp simd
         // copy the calculated line to the second half of the matrix
         for (auto x_index = 0; x_index < width; x_index++) {
             data[(height - y_index - 1) * width + x_index] = data[y_index * width + x_index];
