@@ -1,0 +1,22 @@
+/**
+ * @file LineMandelCalculator.h
+ * @author FULL NAME <xlogin00@stud.fit.vutbr.cz>
+ * @brief Implementation of Mandelbrot calculator that uses SIMD paralelization over lines
+ * @date DATE
+ */
+
+#include <BaseMandelCalculator.h>
+
+class LineMandelCalculator : public BaseMandelCalculator
+{
+public:
+    LineMandelCalculator(unsigned matrixBaseSize, unsigned limit);
+    ~LineMandelCalculator();
+    int *calculateMandelbrot();
+
+private:
+    int* data;
+    float* z_x_temp;
+    float* z_y_temp;
+    int half_height;
+};
