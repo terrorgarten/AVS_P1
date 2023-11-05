@@ -45,15 +45,14 @@ def main(file1=None, file2=None):
     else:
         cnt = np.sum(diff > 1)
 
-        print(f"{fail} Results differs in {cnt} values")
-
         pos = (np.where(a1 != a2))
 
         for p in zip(pos[0], pos[1]):
             print(f"  - {p} {a1[p]} {a2[p]}")
 
+        print(f"{fail} Results differs in {cnt} values")
 
-        return False
+    return False
 
     
     return True
