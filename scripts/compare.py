@@ -47,8 +47,8 @@ def main(file1=None, file2=None):
 
         pos = (np.where(a1 != a2))
 
-        for p in zip(pos[0], pos[1]):
-            print(f"  - {p} {a1[p]} {a2[p]}")
+        # for p in zip(pos[0], pos[1]):
+        #     print(f"  - {p} {a1[p]} {a2[p]}")
 
         print(f"{fail} Results differs in {cnt} values")
 
