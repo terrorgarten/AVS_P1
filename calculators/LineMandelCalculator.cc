@@ -24,7 +24,7 @@ using std::memcpy;
 #define MEM_ALLOC_ERR 1000                      // error code for memory allocation failure
 
 
-//#define DEBUG   // comment this line to disable debug printing
+//#define DEBUG   // uncomment this line to enable debug printing
 #ifdef DEBUG
 #define D_PRINT(x) std::cout << "DEBUG: " << x << std::endl
 #else
@@ -41,7 +41,7 @@ LineMandelCalculator::LineMandelCalculator(unsigned matrixBaseSize, unsigned lim
     z_y_temp = (float *) (aligned_alloc(ALIGN_SIZE, width * sizeof(float)));
     // check allocation success
     if (data == nullptr or z_x_temp == nullptr or z_y_temp == nullptr) {
-        std::cout << typeid(*this).name() << " : Memory allocation failed. Aborting." << endl;
+        cout << typeid(*this).name() << " : Memory allocation failed. Aborting." << endl;
         exit(MEM_ALLOC_ERR);
     }
     // we use the fact that mandelbrot is symmetrical, therefore we only calculate half and then copy it
@@ -69,53 +69,52 @@ LineMandelCalculator::~LineMandelCalculator() {
 
 int *LineMandelCalculator::calculateMandelbrot() {
 
-    // prefill default values to the data array, vectorize it
 #pragma omp simd aligned(data:ALIGN_SIZE) simdlen(SIMD_LEN_INT) uniform(limit)
+    // prefill default values to the data array, vectorize it
     for (auto i = 0; i < height * width; i++) {
         data[i] = limit;
     }
 
+    // iterate over first half of the lines
     for (auto y_index = 0; y_index <= half_height; y_index++) {
-        // use omd simd to calculate mandelbrot using vectorization
-        D_PRINT("Calculating line " << y_index << " of " << half_height);
         auto y_value = float(y_start + y_index * dy);
 
+#pragma omp simd aligned(z_x_temp:ALIGN_SIZE, z_y_temp:ALIGN_SIZE) simdlen(SIMD_LEN_FLOAT) uniform(x_start, dx)
         // prepare the current values for given line (y_index)
         for (auto x_index = 0; x_index <= width; x_index++) {
             z_x_temp[x_index] = float(x_start + x_index * dx);
             z_y_temp[x_index] = y_value;
         }
 
-        auto sum = width;
-        // calculate mandelbrot for given line (y_index)
+        // calculate mandelbrot for given line (y_index) - iterating over the entire line
         for (auto calc_iter = 0; calc_iter < limit; ++calc_iter) {
+#pragma omp simd aligned(data:ALIGN_SIZE, z_x_temp:ALIGN_SIZE, z_y_temp:ALIGN_SIZE) simdlen(SIMD_LEN_FLOAT) uniform(limit, x_start, dx, y_value)
             for (auto x_index = 0; x_index <= width; x_index++) {
-                if (data[y_index * width + x_index] == limit){
+                // if the cell is set to limit, it has not been calculated yet, so perform the calculation.
+                if (data[y_index * width + x_index] == limit) {
+
                     auto x_value = float(x_start + x_index * dx);
+
                     auto z_x = z_x_temp[x_index];
                     auto z_y = z_y_temp[x_index];
 
                     auto z_x2 = z_x * z_x;
                     auto z_y2 = z_y * z_y;
-                    D_PRINT("testing: " << z_x2 + z_y2 << " > 4.0f" );
-                    if (z_x2 + z_y2 > 4.0f) {
-                        D_PRINT("REWRITING");
-                        data[y_index * width + x_index] = calc_iter;
-                        sum = sum - 1;
-                    }
 
-                    z_y_temp[x_index] = 2.0f * z_x * z_y + y_value;
-                    z_x_temp[x_index] = z_x2 - z_y2 + x_value;
+                    if (z_x2 + z_y2 > 4.0f) {
+                        data[y_index * width + x_index] = calc_iter;
+                    } else {
+                        z_y_temp[x_index] = 2.0f * z_x * z_y + y_value;
+                        z_x_temp[x_index] = z_x2 - z_y2 + x_value;
+                    }
                 }
-            }
-            if (!sum) {
-                break;
             }
         }
 
+#pragma omp simd aligned(data: ALIGN_SIZE) uniform(y_index, width)
         // copy the calculated line to the second half of the matrix
         for (auto x_index = 0; x_index < width; x_index++) {
-            memcpy(&data[(height - y_index - 1) * width + x_index], &data[y_index * width + x_index], sizeof(int));
+            data[(height - y_index - 1) * width + x_index] = data[y_index * width + x_index];
         }
     }
     return data;
